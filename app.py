@@ -9,11 +9,11 @@ import google.generativeai as genai
 st.set_page_config(page_title="Bot Xử Lý Ảnh Pro", page_icon="📱", layout="wide")
 st.title("📱 Hệ Thống Xử Lý Ảnh Tự Động")
 
-# Tải Font tiếng Việt trực tiếp từ Google Fonts để không bị lỗi dấu
-@st.cache_resource
+# Tải Font tiếng Việt trực tiếp từ nguồn siêu ổn định (Tránh lỗi 404)
+@st.cache_resource(show_spinner="Đang nạp Font chữ chuẩn Tiếng Việt...")
 def load_vietnamese_font():
-    # Link raw tải thẳng Font Roboto Bold cực nét
-    url = "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto-Bold.ttf"
+    # Sử dụng kho mã nguồn tĩnh, không bị thay đổi cấu trúc như Google Fonts
+    url = "https://raw.githubusercontent.com/openmaptiles/fonts/master/roboto/Roboto-Bold.ttf"
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     response = urllib.request.urlopen(req)
     return response.read()
