@@ -1,18 +1,17 @@
 import streamlit as st
-from PIL import Image, ImageFilter, ImageDraw, ImageFont
+from PIL import Image, ImageFilter
 import io
 import zipfile
 import urllib.request
-import textwrap
 
-# Chuyển sang sử dụng thư viện hệ GenAI MỚI NHẤT của Google
+# Sử dụng thư viện hệ GenAI MỚI NHẤT của Google
 from google import genai
 from google.genai import types
 
 st.set_page_config(page_title="Bot Xử Lý Ảnh Pro", page_icon="📱", layout="wide")
 st.title("📱 Hệ Thống Xử Lý Ảnh Tự Động")
 
-# Tải Font tiếng Việt trực tiếp từ nguồn siêu ổn định (Tránh lỗi 404)
+# Tải Font tiếng Việt trực tiếp từ nguồn siêu ổn định
 @st.cache_resource(show_spinner="Đang nạp Font chữ chuẩn Tiếng Việt...")
 def load_vietnamese_font():
     url = "https://raw.githubusercontent.com/openmaptiles/fonts/master/roboto/Roboto-Bold.ttf"
@@ -97,10 +96,26 @@ with tab2:
     if ai_uploaded_files and ai_prompt and api_key_input:
         if st.button("✨ Phân Tích & Vẽ Lại Ảnh Mới", type="primary", key="tab2_btn"):
             try:
-                # Gọi client mới theo chuẩn google-genai
                 client = genai.Client(api_key=api_key_input)
+                st.info("🔍 Đang quét API Key để tìm siêu mô hình AI tương thích...")
                 
-                st.info("🔍 Đang nạp hệ thống phân tích và hệ thống đồ họa chuẩn SDK mới...")
+                # Auto-detect an toàn
+                try:
+                    all_models = [m.name for m in client.models.list()]
+                    clean_models = [m.replace('models/', '') for m in all_models]
+                except Exception:
+                    clean_models = []
+                
+                # Chọn Não bộ (Vision) ưu tiên Flash
+                vision_candidates = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+                vision_model_name = next((m for m in vision_candidates if m in clean_models), 'gemini-2.5-flash')
+                
+                # Chọn Cọ vẽ (Image Gen) ưu tiên đúng List VIP của bạn
+                image_candidates = ['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview', 'gemini-2.5-flash-image', 'nano-banana-pro-preview']
+                image_model_name = next((m for m in image_candidates if m in clean_models), 'gemini-3.1-flash-image-preview')
+
+                st.success(f"✅ Đã tìm thấy! Động cơ Não: **{vision_model_name}** | Động cơ Vẽ: **{image_model_name}**")
+                
                 ai_zip_buffer = io.BytesIO()
                 progress_bar_ai = st.progress(0)
                 total_files = len(ai_uploaded_files)
@@ -108,26 +123,24 @@ with tab2:
                 with zipfile.ZipFile(ai_zip_buffer, "w") as ai_zip_file:
                     for i, file in enumerate(ai_uploaded_files):
                         img = Image.open(file).convert("RGB")
-                        
                         col1, col2 = st.columns(2)
                         with col1:
                             st.image(img, caption=f"🖼️ Concept Gốc", use_column_width=True)
                         
-                        # --- BƯỚC 1: Dùng Vision Model phân tích ảnh và tạo Master Prompt ---
+                        # --- BƯỚC 1: Vision Model phân tích ảnh và tạo Master Prompt ---
                         st.write("🧠 Đang phân tích phong cách ảnh và dịch yêu cầu...")
                         system_prompt = f"Analyze the attached image in extreme detail (art style, character features, pose, lighting, background). Then, integrate the user's specific request: '{ai_prompt}'. Write ONLY a comprehensive English prompt for an AI image generator to recreate this exact style and scene, applying the requested changes (like shirt color and text overlays). Ensure text requests are wrapped in quotes."
                         
                         vision_response = client.models.generate_content(
-                            model='gemini-2.5-flash',
+                            model=vision_model_name,
                             contents=[system_prompt, img]
                         )
                         master_prompt = vision_response.text.strip()
                         
-                        # --- BƯỚC 2: Dùng Image Model (Imagen 3) để vẽ ảnh mới ---
+                        # --- BƯỚC 2: Image Model (Gemini Image) vẽ ảnh mới ---
                         st.write("🎨 Đang vẽ lại bức tranh mới tinh...")
-                        
                         image_response = client.models.generate_images(
-                            model='imagen-3.0-generate-001',
+                            model=image_model_name,
                             prompt=master_prompt,
                             config=types.GenerateImagesConfig(
                                 number_of_images=1,
@@ -142,7 +155,7 @@ with tab2:
                             with col2:
                                 st.image(ai_output_img, caption=f"✨ Thành Phẩm (AI Đã Vẽ Lại)", use_column_width=True)
                             
-                            # Lưu vào ZIP
+                            # Lưu vào file ZIP
                             img_byte_arr = io.BytesIO()
                             ai_output_img.save(img_byte_arr, format='JPEG', quality=95)
                             file_name = file.name if file.name else f"ai_generated_{i}.jpg"
