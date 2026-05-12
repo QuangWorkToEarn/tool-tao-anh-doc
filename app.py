@@ -1,8 +1,10 @@
 import streamlit as st
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import io
 import zipfile
 import urllib.request
+import textwrap
+import json
 
 # Sử dụng thư viện hệ GenAI MỚI NHẤT của Google
 from google import genai
@@ -20,7 +22,7 @@ def load_vietnamese_font():
     return response.read()
 
 # Chia giao diện làm 2 Tab
-tab1, tab2 = st.tabs(["⚙️ Cắt Ghép Cơ Bản (Tốc độ cao)", "✨ Trợ Lý Sáng Tạo Ảnh AI (Tái Tạo Mới)"])
+tab1, tab2 = st.tabs(["⚙️ Cắt Ghép Cơ Bản", "✨ Quét Tọa Độ & Việt Hóa (Miễn Phí 100%)"])
 
 # ==========================================
 # TAB 1: TOOL CẮT GHÉP CƠ BẢN NHƯ CŨ
@@ -30,7 +32,7 @@ with tab1:
     
     ratio_choice = st.selectbox(
         "📐 Chọn định dạng ảnh đầu ra:", 
-        ["9:16 (Chuẩn Video dọc: TikTok, Shorts, Reels)", "1:1 (Chuẩn Ảnh vuông: Sản phẩm, POD)"],
+        ["9:16 (Chuẩn Video dọc)", "1:1 (Chuẩn Ảnh vuông)"],
         key="tab1_ratio"
     )
 
@@ -78,104 +80,127 @@ with tab1:
                         st.error(f"Lỗi file {file.name}: {e}")
 
             st.success("🎉 Đã xử lý xong!")
-            st.download_button("📦 Tải tất cả ảnh về (.zip)", data=zip_buffer.getvalue(), file_name=f"anh_xuly_{file_prefix[:-1]}.zip", mime="application/zip")
+            st.download_button("📦 Tải tất cả ảnh về (.zip)", data=zip_buffer.getvalue(), file_name=f"anh_xuly.zip", mime="application/zip")
 
 
 # ==========================================
-# TAB 2: TRỢ LÝ SÁNG TẠO ẢNH AI (TÁI TẠO MỚI)
+# TAB 2: TOOL AI NHẬN DIỆN TỌA ĐỘ VÀ ĐÈ BOX TRẮNG
 # ==========================================
 with tab2:
-    st.markdown("💡 **Tính năng Sáng tạo (Dual-Engine):** Tự do lựa chọn Model từ API Key của bạn để vẽ lại ảnh.")
+    st.markdown("💡 **Cơ chế hoạt động:** AI quét ảnh, xác định chính xác khu vực chứa chữ gốc. Sau đó Tool tự động vẽ một tấm bảng trắng đè lên khu vực đó và in chữ Tiếng Việt mới vào.")
     
     api_key_input = st.text_input("🔑 Nhập Gemini API Key của bạn:", type="password")
+    ai_uploaded_files = st.file_uploader("Tải ảnh chứa text cần dịch", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key="tab2_upload")
     
-    # KHI NHẬP API KEY SẼ TỰ ĐỘNG GỌI LIST MODELS
-    if api_key_input:
-        try:
-            client = genai.Client(api_key=api_key_input)
-            raw_models = list(client.models.list())
-            model_names = [m.name for m in raw_models]
-            
-            st.success(f"✅ Đã quét thành công {len(model_names)} models từ API Key của bạn!")
-            
-            # Giao diện cho người dùng tự chọn Model
-            with st.expander("🛠️ Cấu hình AI Thủ công (Bấm để chọn)", expanded=True):
-                col_v, col_i = st.columns(2)
+    if ai_uploaded_files and api_key_input:
+        if st.button("✨ Quét Vùng Khung & Việt Hóa", type="primary", key="tab2_btn"):
+            try:
+                client = genai.Client(api_key=api_key_input)
                 
-                # Cố gắng tìm gemini-2.5-flash làm mặc định cho Não bộ, nếu không có thì lấy cái đầu tiên
-                default_v_index = model_names.index('models/gemini-2.5-flash') if 'models/gemini-2.5-flash' in model_names else 0
-                vision_choice = col_v.selectbox("🧠 Model Phân tích (Não bộ):", model_names, index=default_v_index)
+                # Dùng model siêu tốc độ và miễn phí
+                model_name = 'gemini-2.5-flash'
+                st.success(f"✅ Đang kích hoạt radar nhận diện: **{model_name}**")
                 
-                # Cố gắng tìm imagen hoặc các model image của bạn làm mặc định
-                default_i_index = 0
-                for i, name in enumerate(model_names):
-                    if 'image' in name or 'banana' in name or 'imagen' in name:
-                        default_i_index = i
-                        break
-                image_choice = col_i.selectbox("🎨 Model Vẽ Ảnh (Họa sĩ):", model_names, index=default_i_index)
-
-            ai_uploaded_files = st.file_uploader("Tải ảnh gốc dùng làm Concept", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
-            ai_prompt = st.text_area("🤖 Lệnh cho AI:", value="Đổi áo của nhân vật sang màu xanh lá. In dòng chữ 'HACK CHIỀU CAO 1M65' to và rõ ràng ở dưới.", height=100)
-
-            if ai_uploaded_files and ai_prompt:
-                if st.button("✨ Phân Tích & Vẽ Lại Ảnh Mới", type="primary"):
-                    try:
-                        ai_zip_buffer = io.BytesIO()
-                        progress_bar_ai = st.progress(0)
-                        total_files = len(ai_uploaded_files)
+                # Lệnh yêu cầu AI trả về định dạng JSON chứa text và tọa độ
+                prompt_text = """Analyze this image. Find the main block of text (like Chinese/foreign promotional text).
+                1. Translate the meaning into a very short, catchy Vietnamese hook (maximum 10 words).
+                2. Identify the bounding box of that original text block.
+                Output ONLY a JSON object with this exact schema:
+                {
+                    "text": "Vietnamese hook here",
+                    "box": [ymin, xmin, ymax, xmax]
+                }
+                The box coordinates MUST be integers between 0 and 1000 representing the bounding box (ymin=top, xmin=left, ymax=bottom, xmax=right)."""
+                
+                font_bytes = load_vietnamese_font()
+                
+                ai_zip_buffer = io.BytesIO()
+                progress_bar_ai = st.progress(0)
+                total_files = len(ai_uploaded_files)
+                
+                with zipfile.ZipFile(ai_zip_buffer, "w") as ai_zip_file:
+                    for i, file in enumerate(ai_uploaded_files):
+                        img = Image.open(file).convert("RGB")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.image(img, caption=f"🖼️ Ảnh Gốc", use_column_width=True)
                         
-                        with zipfile.ZipFile(ai_zip_buffer, "w") as ai_zip_file:
-                            for i, file in enumerate(ai_uploaded_files):
-                                img = Image.open(file).convert("RGB")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.image(img, caption="🖼️ Concept Gốc", use_column_width=True)
-                                
-                                # --- BƯỚC 1: Phân tích ---
-                                st.write(f"🧠 Đang dùng {vision_choice} để phân tích...")
-                                system_prompt = f"Analyze the attached image in extreme detail. Integrate the user's specific request: '{ai_prompt}'. Write ONLY a comprehensive English prompt for an AI image generator."
-                                
-                                # Bỏ chữ 'models/' để tương thích với SDK mới
-                                v_clean = vision_choice.replace('models/', '')
-                                i_clean = image_choice.replace('models/', '')
-                                
-                                vision_response = client.models.generate_content(
-                                    model=v_clean,
-                                    contents=[system_prompt, img]
-                                )
-                                master_prompt = vision_response.text.strip()
-                                
-                                # --- BƯỚC 2: Vẽ ảnh ---
-                                st.write(f"🎨 Đang dùng {image_choice} để vẽ...")
-                                image_response = client.models.generate_images(
-                                    model=i_clean,
-                                    prompt=master_prompt,
-                                    config=types.GenerateImagesConfig(
-                                        number_of_images=1,
-                                        output_mime_type="image/jpeg",
-                                        aspect_ratio="3:4" 
-                                    )
-                                )
-                                
-                                ai_output_img = image_response.generated_images[0].image
-                                    
-                                if ai_output_img:
-                                    with col2:
-                                        st.image(ai_output_img, caption="✨ Thành Phẩm", use_column_width=True)
-                                    
-                                    img_byte_arr = io.BytesIO()
-                                    ai_output_img.save(img_byte_arr, format='JPEG', quality=95)
-                                    file_name = file.name if file.name else f"ai_generated_{i}.jpg"
-                                    ai_zip_file.writestr(f"AI_ReCreated_{file_name}", img_byte_arr.getvalue())
-                                
-                                progress_bar_ai.progress((i + 1) / total_files)
+                        st.write("🔍 AI đang dò tìm tọa độ khung chữ...")
                         
-                        st.success("🎉 Đã sáng tạo xong!")
-                        st.download_button("📦 Tải Ảnh Về", data=ai_zip_buffer.getvalue(), file_name="anh_ai_vedep.zip", mime="application/zip")
+                        # Ép AI trả về chuẩn cấu trúc JSON
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=[prompt_text, img],
+                            config=types.GenerateContentConfig(
+                                response_mime_type="application/json",
+                            )
+                        )
                         
-                    except Exception as e:
-                        st.error(f"❌ Có lỗi trong quá trình chạy Model: {e}")
-                        st.info("💡 Mẹo: Lỗi 'not supported for predict' nghĩa là Model bạn vừa chọn ở Menu thả xuống chưa được Google cấp quyền vẽ ảnh. Hãy thử chọn một Model khác có chữ 'image' hoặc 'imagen' trong danh sách nhé.")
-                        
-        except Exception as e:
-            st.error(f"❌ Lỗi kết nối quét danh sách API: {e}")
+                        try:
+                            # Đọc dữ liệu JSON do AI trả về
+                            data = json.loads(response.text.strip())
+                            vi_text = data.get("text", "SẢN PHẨM HOT")
+                            box = data.get("box", [100, 100, 300, 900]) # Fallback nếu lỗi
+                            
+                            ymin, xmin, ymax, xmax = box
+                            
+                            # Chuyển đổi tọa độ (tỉ lệ 0-1000) sang Pixel thực tế của ảnh
+                            img_w, img_h = img.size
+                            top = int((ymin / 1000) * img_h)
+                            left = int((xmin / 1000) * img_w)
+                            bottom = int((ymax / 1000) * img_h)
+                            right = int((xmax / 1000) * img_w)
+                            
+                            # Mở rộng Box Trắng ra một chút (Padding) để đảm bảo che lấp sạch sẽ 100% chữ cũ
+                            padding = 15
+                            left = max(0, left - padding)
+                            top = max(0, top - padding)
+                            right = min(img_w, right + padding)
+                            bottom = min(img_h, bottom + padding)
+                            
+                            # 1. Vẽ Khung Layer Full Trắng
+                            draw = ImageDraw.Draw(img)
+                            draw.rectangle([left, top, right, bottom], fill=(255, 255, 255))
+                            
+                            # 2. Xử lý Cỡ Chữ và Tự Động Xuống Dòng để nhét vừa Box Trắng
+                            box_width = right - left
+                            box_height = bottom - top
+                            
+                            # Linh hoạt cỡ chữ theo chiều cao của box
+                            font_size = max(20, int(box_height * 0.4)) 
+                            font = ImageFont.truetype(io.BytesIO(font_bytes), size=font_size)
+                            
+                            # Tính toán số lượng ký tự trên 1 dòng để không bị tràn khung trắng
+                            chars_per_line = max(10, int(box_width / (font_size * 0.5)))
+                            wrapper = textwrap.TextWrapper(width=chars_per_line)
+                            wrapped_text = wrapper.fill(text=vi_text)
+                            
+                            # 3. Căn giữa và in Chữ Tiếng Việt (Màu Đen) lên Box Trắng
+                            bbox = draw.multiline_textbbox((0, 0), wrapped_text, font=font, align='center')
+                            text_w = bbox[2] - bbox[0]
+                            text_h = bbox[3] - bbox[1]
+                            
+                            text_x = left + (box_width - text_w) / 2
+                            text_y = top + (box_height - text_h) / 2
+                            
+                            draw.multiline_text((text_x, text_y), wrapped_text, font=font, fill=(0, 0, 0), align='center')
+                            
+                            with col2:
+                                st.image(img, caption="✨ Đã đè Box Trắng & Việt Hóa", use_column_width=True)
+                            
+                            # Lưu vào file ZIP
+                            img_byte_arr = io.BytesIO()
+                            img.save(img_byte_arr, format='JPEG', quality=95)
+                            file_name = file.name if file.name else f"ai_translated_{i}.jpg"
+                            ai_zip_file.writestr(f"AI_BoxTrang_{file_name}", img_byte_arr.getvalue())
+                            
+                        except Exception as parse_error:
+                            st.error(f"❌ Lỗi khi phân tích tọa độ của file này: {parse_error}")
+                            
+                        progress_bar_ai.progress((i + 1) / total_files)
+                
+                st.success("🎉 Xong! Toàn bộ ảnh đã được tẩy chữ và Việt Hóa siêu mượt!")
+                st.download_button("📦 Tải Ảnh Siêu Tốc Về", data=ai_zip_buffer.getvalue(), file_name="anh_boxtrang_viethoa.zip", mime="application/zip")
+                
+            except Exception as e:
+                st.error(f"❌ Có lỗi kết nối AI: {e}")
