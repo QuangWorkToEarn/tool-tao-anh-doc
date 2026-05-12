@@ -85,74 +85,97 @@ with tab1:
 # TAB 2: TRỢ LÝ SÁNG TẠO ẢNH AI (TÁI TẠO MỚI)
 # ==========================================
 with tab2:
-    st.markdown("💡 **Tính năng Sáng tạo (Dual-Engine):** AI sẽ đọc concept ảnh cũ, tiếp nhận yêu cầu đổi màu/chi tiết của bạn, và tự động vẽ ra một bức ảnh MỚI TINH, lách 100% quét bản quyền!")
+    st.markdown("💡 **Tính năng Sáng tạo (Dual-Engine):** Tự do lựa chọn Model từ API Key của bạn để vẽ lại ảnh.")
     
     api_key_input = st.text_input("🔑 Nhập Gemini API Key của bạn:", type="password")
-    ai_uploaded_files = st.file_uploader("Tải ảnh gốc dùng làm Concept", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key="tab2_upload")
     
-    default_prompt = "Dựa trên bức ảnh này, hãy đổi áo của nhân vật sang màu xanh lá cây đậm. In dòng chữ 'HACK CHIỀU CAO 1M65' to và rõ ràng ở khoảng trống phía dưới."
-    ai_prompt = st.text_area("🤖 Lệnh cho AI (Ví dụ: thay đổi màu sắc trang phục, thêm chữ):", value=default_prompt, height=100)
+    # KHI NHẬP API KEY SẼ TỰ ĐỘNG GỌI LIST MODELS
+    if api_key_input:
+        try:
+            client = genai.Client(api_key=api_key_input)
+            raw_models = list(client.models.list())
+            model_names = [m.name for m in raw_models]
+            
+            st.success(f"✅ Đã quét thành công {len(model_names)} models từ API Key của bạn!")
+            
+            # Giao diện cho người dùng tự chọn Model
+            with st.expander("🛠️ Cấu hình AI Thủ công (Bấm để chọn)", expanded=True):
+                col_v, col_i = st.columns(2)
+                
+                # Cố gắng tìm gemini-2.5-flash làm mặc định cho Não bộ, nếu không có thì lấy cái đầu tiên
+                default_v_index = model_names.index('models/gemini-2.5-flash') if 'models/gemini-2.5-flash' in model_names else 0
+                vision_choice = col_v.selectbox("🧠 Model Phân tích (Não bộ):", model_names, index=default_v_index)
+                
+                # Cố gắng tìm imagen hoặc các model image của bạn làm mặc định
+                default_i_index = 0
+                for i, name in enumerate(model_names):
+                    if 'image' in name or 'banana' in name or 'imagen' in name:
+                        default_i_index = i
+                        break
+                image_choice = col_i.selectbox("🎨 Model Vẽ Ảnh (Họa sĩ):", model_names, index=default_i_index)
 
-    if ai_uploaded_files and ai_prompt and api_key_input:
-        if st.button("✨ Phân Tích & Vẽ Lại Ảnh Mới", type="primary", key="tab2_btn"):
-            try:
-                client = genai.Client(api_key=api_key_input)
-                
-                # CHỐT CỨNG MODEL THEO ĐÚNG Ý BẠN
-                vision_model_name = 'gemini-2.5-flash'
-                image_model_name = 'nano-banana-pro-preview'
+            ai_uploaded_files = st.file_uploader("Tải ảnh gốc dùng làm Concept", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+            ai_prompt = st.text_area("🤖 Lệnh cho AI:", value="Đổi áo của nhân vật sang màu xanh lá. In dòng chữ 'HACK CHIỀU CAO 1M65' to và rõ ràng ở dưới.", height=100)
 
-                st.success(f"✅ Đã chốt Động cơ Não: **{vision_model_name}** | Động cơ Vẽ: **{image_model_name}**")
-                
-                ai_zip_buffer = io.BytesIO()
-                progress_bar_ai = st.progress(0)
-                total_files = len(ai_uploaded_files)
-                
-                with zipfile.ZipFile(ai_zip_buffer, "w") as ai_zip_file:
-                    for i, file in enumerate(ai_uploaded_files):
-                        img = Image.open(file).convert("RGB")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.image(img, caption=f"🖼️ Concept Gốc", use_column_width=True)
+            if ai_uploaded_files and ai_prompt:
+                if st.button("✨ Phân Tích & Vẽ Lại Ảnh Mới", type="primary"):
+                    try:
+                        ai_zip_buffer = io.BytesIO()
+                        progress_bar_ai = st.progress(0)
+                        total_files = len(ai_uploaded_files)
                         
-                        # --- BƯỚC 1: Vision Model phân tích ảnh và tạo Master Prompt ---
-                        st.write("🧠 Đang phân tích phong cách ảnh và dịch yêu cầu...")
-                        system_prompt = f"Analyze the attached image in extreme detail (art style, character features, pose, lighting, background). Then, integrate the user's specific request: '{ai_prompt}'. Write ONLY a comprehensive English prompt for an AI image generator to recreate this exact style and scene, applying the requested changes (like shirt color and text overlays). Ensure text requests are wrapped in quotes."
+                        with zipfile.ZipFile(ai_zip_buffer, "w") as ai_zip_file:
+                            for i, file in enumerate(ai_uploaded_files):
+                                img = Image.open(file).convert("RGB")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.image(img, caption="🖼️ Concept Gốc", use_column_width=True)
+                                
+                                # --- BƯỚC 1: Phân tích ---
+                                st.write(f"🧠 Đang dùng {vision_choice} để phân tích...")
+                                system_prompt = f"Analyze the attached image in extreme detail. Integrate the user's specific request: '{ai_prompt}'. Write ONLY a comprehensive English prompt for an AI image generator."
+                                
+                                # Bỏ chữ 'models/' để tương thích với SDK mới
+                                v_clean = vision_choice.replace('models/', '')
+                                i_clean = image_choice.replace('models/', '')
+                                
+                                vision_response = client.models.generate_content(
+                                    model=v_clean,
+                                    contents=[system_prompt, img]
+                                )
+                                master_prompt = vision_response.text.strip()
+                                
+                                # --- BƯỚC 2: Vẽ ảnh ---
+                                st.write(f"🎨 Đang dùng {image_choice} để vẽ...")
+                                image_response = client.models.generate_images(
+                                    model=i_clean,
+                                    prompt=master_prompt,
+                                    config=types.GenerateImagesConfig(
+                                        number_of_images=1,
+                                        output_mime_type="image/jpeg",
+                                        aspect_ratio="3:4" 
+                                    )
+                                )
+                                
+                                ai_output_img = image_response.generated_images[0].image
+                                    
+                                if ai_output_img:
+                                    with col2:
+                                        st.image(ai_output_img, caption="✨ Thành Phẩm", use_column_width=True)
+                                    
+                                    img_byte_arr = io.BytesIO()
+                                    ai_output_img.save(img_byte_arr, format='JPEG', quality=95)
+                                    file_name = file.name if file.name else f"ai_generated_{i}.jpg"
+                                    ai_zip_file.writestr(f"AI_ReCreated_{file_name}", img_byte_arr.getvalue())
+                                
+                                progress_bar_ai.progress((i + 1) / total_files)
                         
-                        vision_response = client.models.generate_content(
-                            model=vision_model_name,
-                            contents=[system_prompt, img]
-                        )
-                        master_prompt = vision_response.text.strip()
+                        st.success("🎉 Đã sáng tạo xong!")
+                        st.download_button("📦 Tải Ảnh Về", data=ai_zip_buffer.getvalue(), file_name="anh_ai_vedep.zip", mime="application/zip")
                         
-                        # --- BƯỚC 2: Image Model (Nano Banana Pro) vẽ ảnh mới ---
-                        st.write("🎨 Đang vẽ lại bức tranh mới tinh...")
-                        image_response = client.models.generate_images(
-                            model=image_model_name,
-                            prompt=master_prompt,
-                            config=types.GenerateImagesConfig(
-                                number_of_images=1,
-                                output_mime_type="image/jpeg",
-                                aspect_ratio="3:4" 
-                            )
-                        )
+                    except Exception as e:
+                        st.error(f"❌ Có lỗi trong quá trình chạy Model: {e}")
+                        st.info("💡 Mẹo: Lỗi 'not supported for predict' nghĩa là Model bạn vừa chọn ở Menu thả xuống chưa được Google cấp quyền vẽ ảnh. Hãy thử chọn một Model khác có chữ 'image' hoặc 'imagen' trong danh sách nhé.")
                         
-                        ai_output_img = image_response.generated_images[0].image
-                            
-                        if ai_output_img:
-                            with col2:
-                                st.image(ai_output_img, caption=f"✨ Thành Phẩm (AI Đã Vẽ Lại)", use_column_width=True)
-                            
-                            # Lưu vào file ZIP
-                            img_byte_arr = io.BytesIO()
-                            ai_output_img.save(img_byte_arr, format='JPEG', quality=95)
-                            file_name = file.name if file.name else f"ai_generated_{i}.jpg"
-                            ai_zip_file.writestr(f"AI_ReCreated_{file_name}", img_byte_arr.getvalue())
-                        
-                        progress_bar_ai.progress((i + 1) / total_files)
-                
-                st.success("🎉 Đã sáng tạo xong toàn bộ mẫu mới!")
-                st.download_button("📦 Tải Ảnh Siêu Phẩm Về (.zip)", data=ai_zip_buffer.getvalue(), file_name="anh_ai_vedep.zip", mime="application/zip", key="tab2_download")
-                
-            except Exception as e:
-                st.error(f"❌ Có lỗi trong quá trình sáng tạo: {e}")
+        except Exception as e:
+            st.error(f"❌ Lỗi kết nối quét danh sách API: {e}")
