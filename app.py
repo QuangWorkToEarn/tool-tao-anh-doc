@@ -97,24 +97,12 @@ with tab2:
         if st.button("✨ Phân Tích & Vẽ Lại Ảnh Mới", type="primary", key="tab2_btn"):
             try:
                 client = genai.Client(api_key=api_key_input)
-                st.info("🔍 Đang quét API Key để tìm siêu mô hình AI tương thích...")
                 
-                # Auto-detect an toàn
-                try:
-                    all_models = [m.name for m in client.models.list()]
-                    clean_models = [m.replace('models/', '') for m in all_models]
-                except Exception:
-                    clean_models = []
-                
-                # Chọn Não bộ (Vision) ưu tiên Flash
-                vision_candidates = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
-                vision_model_name = next((m for m in vision_candidates if m in clean_models), 'gemini-2.5-flash')
-                
-                # Chọn Cọ vẽ (Image Gen) ưu tiên đúng List VIP của bạn
-                image_candidates = ['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview', 'gemini-2.5-flash-image', 'nano-banana-pro-preview']
-                image_model_name = next((m for m in image_candidates if m in clean_models), 'gemini-3.1-flash-image-preview')
+                # CHỐT CỨNG MODEL THEO ĐÚNG Ý BẠN
+                vision_model_name = 'gemini-2.5-flash'
+                image_model_name = 'nano-banana-pro-preview'
 
-                st.success(f"✅ Đã tìm thấy! Động cơ Não: **{vision_model_name}** | Động cơ Vẽ: **{image_model_name}**")
+                st.success(f"✅ Đã chốt Động cơ Não: **{vision_model_name}** | Động cơ Vẽ: **{image_model_name}**")
                 
                 ai_zip_buffer = io.BytesIO()
                 progress_bar_ai = st.progress(0)
@@ -137,7 +125,7 @@ with tab2:
                         )
                         master_prompt = vision_response.text.strip()
                         
-                        # --- BƯỚC 2: Image Model (Gemini Image) vẽ ảnh mới ---
+                        # --- BƯỚC 2: Image Model (Nano Banana Pro) vẽ ảnh mới ---
                         st.write("🎨 Đang vẽ lại bức tranh mới tinh...")
                         image_response = client.models.generate_images(
                             model=image_model_name,
