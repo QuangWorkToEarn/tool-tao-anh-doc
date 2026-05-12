@@ -96,8 +96,30 @@ with tab2:
         if st.button("✨ Bắt Đầu Việt Hóa Ảnh", type="primary", key="tab2_btn"):
             try:
                 genai.configure(api_key=api_key_input)
-                # Đã sửa lại đúng tên gọi chuẩn của model Flash
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                # CƠ CHẾ AUTO-DETECT: Tự động hỏi Google xem API Key đang hỗ trợ model nào
+                st.info("🔍 Đang dò tìm mô hình AI tương thích với API Key của bạn...")
+                vision_model_name = None
+                available_models = []
+                
+                for m in genai.list_models():
+                    if 'generateContent' in m.supported_generation_methods:
+                        available_models.append(m.name)
+                        # Tự động bắt lấy model nào có chữ "1.5-flash" hoặc "1.5-pro"
+                        if '1.5-flash' in m.name:
+                            vision_model_name = m.name
+                            break  
+                        elif '1.5-pro' in m.name:
+                            vision_model_name = m.name
+                        elif 'gemini-pro-vision' in m.name and not vision_model_name:
+                            vision_model_name = m.name
+                
+                if not vision_model_name:
+                    st.error(f"❌ API Key của bạn không có quyền truy cập AI xử lý ảnh. Các model mà Key của bạn đang có: {', '.join(available_models)}")
+                    st.stop()
+                
+                st.success(f"✅ Đã kết nối thành công với động cơ: **{vision_model_name}**")
+                model = genai.GenerativeModel(vision_model_name)
                 
                 st.info("Đang xử lý... AI đang dịch và hệ thống đang dàn lại bố cục chuẩn TikTok 🚀")
                 ai_zip_buffer = io.BytesIO()
