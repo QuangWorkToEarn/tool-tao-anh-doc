@@ -3,29 +3,41 @@ from PIL import Image, ImageFilter
 import io
 import zipfile
 
-# Cấu hình chuẩn 9:16
-TARGET_WIDTH = 1080
-TARGET_HEIGHT = 1920
+st.set_page_config(page_title="Bot Tạo Ảnh Tự Động", page_icon="📱")
+st.title("📱 Tool Xử Lý Ảnh Tự Động")
 
-st.set_page_config(page_title="Bot Tạo Ảnh Dọc", page_icon="📱")
-st.title("📱 Tool Tạo Ảnh Dọc 9:16 Tự Động")
+st.markdown("💡 **Mẹo:** Bạn có thể bôi đen nhiều ảnh trong máy tính và **Kéo Thả** thẳng vào khung bên dưới để xử lý hàng loạt cho nhanh nhé!")
 
-# Đã cập nhật phần hướng dẫn Copy/Paste
-st.markdown("💡 **Mẹo:** Bạn có thể dùng công cụ chụp màn hình, hoặc Copy ảnh bất kỳ rồi click chuột vào khung dưới đây và ấn **Ctrl + V** (hoặc **Cmd + V**) để dán thẳng ảnh vào nhé!")
+# Menu thả xuống chọn tỷ lệ
+ratio_choice = st.selectbox(
+    "📐 Chọn định dạng ảnh đầu ra:", 
+    [
+        "9:16 (Chuẩn Video dọc: TikTok, Shorts, Reels)", 
+        "1:1 (Chuẩn Ảnh vuông: Sản phẩm Shopee, Print-on-Demand)"
+    ]
+)
 
-# Khung upload file (Cập nhật text)
+# Thiết lập kích thước chuẩn dựa trên lựa chọn của người dùng
+if ratio_choice.startswith("9:16"):
+    TARGET_WIDTH = 1080
+    TARGET_HEIGHT = 1920
+    file_prefix = "916_"
+else:
+    TARGET_WIDTH = 1080
+    TARGET_HEIGHT = 1080
+    file_prefix = "11_"
+
+# Khung upload file
 uploaded_files = st.file_uploader(
-    "Chọn ảnh, Kéo thả, hoặc Dán (Paste) ảnh trực tiếp vào đây", 
+    "Chọn ảnh hoặc Kéo thả ảnh trực tiếp vào đây", 
     accept_multiple_files=True, 
     type=['png', 'jpg', 'jpeg', 'webp']
 )
 
 if uploaded_files:
     if st.button("🚀 Bắt Đầu Xử Lý", type="primary"):
-        # Tạo file ZIP trong bộ nhớ để chứa các ảnh đã xử lý
         zip_buffer = io.BytesIO()
         
-        # Thanh tiến trình hiển thị cho trực quan
         progress_bar = st.progress(0)
         total_files = len(uploaded_files)
         
@@ -60,14 +72,13 @@ if uploaded_files:
                     offset_y = (TARGET_HEIGHT - fg_new_h) // 2
                     bg_img.paste(fg_img, (offset_x, offset_y))
 
-                    # 5. Lưu ảnh vào bộ nhớ ảo thay vì lưu xuống ổ cứng
+                    # 5. Lưu ảnh vào bộ nhớ ảo
                     img_byte_arr = io.BytesIO()
                     bg_img.save(img_byte_arr, format='JPEG', quality=95)
                     
-                    # 6. Ghi vào file ZIP
-                    # Nếu là ảnh dán từ Clipboard, Streamlit thường đặt tên mặc định là 'image.png'
+                    # 6. Ghi vào file ZIP với tiền tố tương ứng (916_ hoặc 11_)
                     file_name = file.name if file.name else f"pasted_image_{i}.jpg"
-                    zip_file.writestr(f"916_{file_name}", img_byte_arr.getvalue())
+                    zip_file.writestr(f"{file_prefix}{file_name}", img_byte_arr.getvalue())
                     
                     # Cập nhật thanh tiến trình
                     progress_bar.progress((i + 1) / total_files)
@@ -81,6 +92,6 @@ if uploaded_files:
         st.download_button(
             label="📦 Tải tất cả ảnh về (.zip)",
             data=zip_buffer.getvalue(),
-            file_name="anh_doc_916.zip",
+            file_name=f"anh_xuly_{file_prefix[:-1]}.zip",
             mime="application/zip"
         )
