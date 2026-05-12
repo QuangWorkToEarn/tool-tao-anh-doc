@@ -12,7 +12,8 @@ st.title("📱 Hệ Thống Xử Lý Ảnh Tự Động")
 # Tải Font tiếng Việt trực tiếp từ Google Fonts để không bị lỗi dấu
 @st.cache_resource
 def load_vietnamese_font():
-    url = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Black.ttf"
+    # Link raw tải thẳng Font Roboto Bold cực nét
+    url = "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto-Bold.ttf"
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     response = urllib.request.urlopen(req)
     return response.read()
