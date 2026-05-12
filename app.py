@@ -4,7 +4,10 @@ import io
 import zipfile
 import urllib.request
 import textwrap
-import google.generativeai as genai
+
+# Chuyển sang sử dụng thư viện hệ GenAI MỚI NHẤT của Google
+from google import genai
+from google.genai import types
 
 st.set_page_config(page_title="Bot Xử Lý Ảnh Pro", page_icon="📱", layout="wide")
 st.title("📱 Hệ Thống Xử Lý Ảnh Tự Động")
@@ -94,22 +97,10 @@ with tab2:
     if ai_uploaded_files and ai_prompt and api_key_input:
         if st.button("✨ Phân Tích & Vẽ Lại Ảnh Mới", type="primary", key="tab2_btn"):
             try:
-                genai.configure(api_key=api_key_input)
+                # Gọi client mới theo chuẩn google-genai
+                client = genai.Client(api_key=api_key_input)
                 
-                # 1. Tự động dò tìm các siêu mô hình VIP của bạn
-                st.info("🔍 Đang nạp hệ thống phân tích và hệ thống đồ họa...")
-                all_models = [m.name for m in genai.list_models()]
-                
-                # Ưu tiên các model Text/Vision cực mạnh
-                vision_model_name = next((m for m in ['models/gemini-2.5-flash', 'models/gemini-2.0-flash', 'models/gemini-1.5-flash'] if m in all_models), 'models/gemini-1.5-flash')
-                vision_model = genai.GenerativeModel(vision_model_name)
-                
-                # Ưu tiên các model Đồ họa (Image Gen)
-                image_model_name = next((m for m in ['models/gemini-3.1-flash-image-preview', 'models/gemini-2.5-flash-image', 'models/nano-banana-pro-preview'] if m in all_models), 'models/imagen-3.0-generate-001')
-                image_model = genai.ImageGenerationModel(image_model_name)
-                
-                st.success(f"✅ Đã kích hoạt Động cơ Não: **{vision_model_name}** | Động cơ Vẽ: **{image_model_name}**")
-                
+                st.info("🔍 Đang nạp hệ thống phân tích và hệ thống đồ họa chuẩn SDK mới...")
                 ai_zip_buffer = io.BytesIO()
                 progress_bar_ai = st.progress(0)
                 total_files = len(ai_uploaded_files)
@@ -126,26 +117,26 @@ with tab2:
                         st.write("🧠 Đang phân tích phong cách ảnh và dịch yêu cầu...")
                         system_prompt = f"Analyze the attached image in extreme detail (art style, character features, pose, lighting, background). Then, integrate the user's specific request: '{ai_prompt}'. Write ONLY a comprehensive English prompt for an AI image generator to recreate this exact style and scene, applying the requested changes (like shirt color and text overlays). Ensure text requests are wrapped in quotes."
                         
-                        vision_response = vision_model.generate_content([system_prompt, img])
+                        vision_response = client.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=[system_prompt, img]
+                        )
                         master_prompt = vision_response.text.strip()
                         
-                        # --- BƯỚC 2: Dùng Image Model để vẽ ảnh mới dựa trên Master Prompt ---
+                        # --- BƯỚC 2: Dùng Image Model (Imagen 3) để vẽ ảnh mới ---
                         st.write("🎨 Đang vẽ lại bức tranh mới tinh...")
                         
-                        img_result = image_model.generate_images(prompt=master_prompt, number_of_images=1)
+                        image_response = client.models.generate_images(
+                            model='imagen-3.0-generate-001',
+                            prompt=master_prompt,
+                            config=types.GenerateImagesConfig(
+                                number_of_images=1,
+                                output_mime_type="image/jpeg",
+                                aspect_ratio="3:4" 
+                            )
+                        )
                         
-                        # Trích xuất dữ liệu ảnh mới từ API
-                        ai_output_img = None
-                        try:
-                            if hasattr(img_result.images[0], '_pil_image'):
-                                ai_output_img = img_result.images[0]._pil_image
-                            elif hasattr(img_result.images[0], 'image_bytes'):
-                                ai_output_img = Image.open(io.BytesIO(img_result.images[0].image_bytes))
-                            elif hasattr(img_result.images[0], 'image') and hasattr(img_result.images[0].image, 'image_bytes'):
-                                ai_output_img = Image.open(io.BytesIO(img_result.images[0].image.image_bytes))
-                        except Exception as parse_e:
-                            st.error(f"Lỗi trích xuất đồ họa: {parse_e}")
-                            continue
+                        ai_output_img = image_response.generated_images[0].image
                             
                         if ai_output_img:
                             with col2:
