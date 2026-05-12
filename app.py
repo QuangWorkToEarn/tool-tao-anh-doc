@@ -97,28 +97,35 @@ with tab2:
             try:
                 genai.configure(api_key=api_key_input)
                 
-                # CƠ CHẾ AUTO-DETECT: Tự động hỏi Google xem API Key đang hỗ trợ model nào
+                # CƠ CHẾ AUTO-DETECT SIÊU CẤP TƯƠNG LAI
                 st.info("🔍 Đang dò tìm mô hình AI tương thích với API Key của bạn...")
                 vision_model_name = None
-                available_models = []
                 
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        available_models.append(m.name)
-                        # Tự động bắt lấy model nào có chữ "1.5-flash" hoặc "1.5-pro"
-                        if '1.5-flash' in m.name:
-                            vision_model_name = m.name
-                            break  
-                        elif '1.5-pro' in m.name:
-                            vision_model_name = m.name
-                        elif 'gemini-pro-vision' in m.name and not vision_model_name:
-                            vision_model_name = m.name
+                # Lấy danh sách tất cả các model hỗ trợ xử lý
+                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                
+                # Ưu tiên tìm các phiên bản Flash tốc độ cao nhất từ list của bạn
+                priority_list = [
+                    'models/gemini-2.5-flash', 
+                    'models/gemini-2.0-flash', 
+                    'models/gemini-flash-latest', 
+                    'models/gemini-1.5-flash'
+                ]
+                
+                for pref in priority_list:
+                    if pref in available_models:
+                        vision_model_name = pref
+                        break
+                        
+                # Nếu không tìm thấy, lấy tự động model đầu tiên hỗ trợ
+                if not vision_model_name and len(available_models) > 0:
+                    vision_model_name = available_models[0]
                 
                 if not vision_model_name:
-                    st.error(f"❌ API Key của bạn không có quyền truy cập AI xử lý ảnh. Các model mà Key của bạn đang có: {', '.join(available_models)}")
+                    st.error("❌ API Key của bạn không hỗ trợ tính năng AI này.")
                     st.stop()
                 
-                st.success(f"✅ Đã kết nối thành công với động cơ: **{vision_model_name}**")
+                st.success(f"✅ Đã kích hoạt siêu động cơ: **{vision_model_name}**")
                 model = genai.GenerativeModel(vision_model_name)
                 
                 st.info("Đang xử lý... AI đang dịch và hệ thống đang dàn lại bố cục chuẩn TikTok 🚀")
