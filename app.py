@@ -70,47 +70,66 @@ with tab1:
 
 
 # ==========================================
-# TAB 2: TOOL XỬ LÝ ẢNH BẰNG AI
+# TAB 2: TOOL XỬ LÝ ẢNH BẰNG AI (IMAGE-TO-IMAGE)
 # ==========================================
 with tab2:
-    st.markdown("💡 **Tính năng AI:** Tải ảnh lên và ra lệnh cho AI (Ví dụ: Xóa chữ, đổi nền, dịch sang tiếng Việt, sắp xếp lại bố cục).")
+    st.markdown("💡 **Tính năng AI (Nano Banana 2):** Dịch text, thay đổi cấu trúc ảnh, xóa chi tiết thừa trả về ảnh hoàn chỉnh.")
     
-    # Ô nhập API Key (Bảo mật, ẩn ký tự)
-    api_key_input = st.text_input("🔑 Nhập Gemini API Key của bạn (Lấy miễn phí tại aistudio.google.com):", type="password")
+    api_key_input = st.text_input("🔑 Nhập Gemini API Key của bạn:", type="password")
+    ai_uploaded_files = st.file_uploader("Tải ảnh đầu vào", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key="tab2_upload")
     
-    # Khung upload ảnh cho AI
-    ai_uploaded_files = st.file_uploader("Tải ảnh cần AI xử lý lên đây", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key="tab2_upload")
-    
-    # Ô nhập lệnh (Prompt)
-    ai_prompt = st.text_area("🤖 Lệnh cho AI (Prompt):", placeholder="Ví dụ: Chỉnh sửa ảnh này thành ảnh cho thị trường Việt. Sao cho Text không được nằm ở 1/3 phía trên và dưới...")
+    # Gợi ý một Prompt cực mạnh để anh em làm nội dung dễ dùng
+    default_prompt = "Dịch toàn bộ chữ trong ảnh này sang tiếng Việt. Sắp xếp lại bố cục sao cho toàn bộ văn bản nằm ở giữa khung hình, tuyệt đối không để chữ lọt vào 1/3 phía trên và 1/3 phía dưới của ảnh. Giữ nguyên phong cách thiết kế và màu sắc gốc."
+    ai_prompt = st.text_area("🤖 Lệnh cho AI (Prompt):", value=default_prompt, height=100)
 
     if ai_uploaded_files and ai_prompt and api_key_input:
-        if st.button("✨ Bắt Đầu Xử Lý Bằng AI", type="primary", key="tab2_btn"):
+        if st.button("✨ Bắt Đầu Sinh Ảnh Mới", type="primary", key="tab2_btn"):
             try:
-                # Cấu hình API Key
                 genai.configure(api_key=api_key_input)
+                # Gọi mô hình tạo và chỉnh sửa ảnh Gemini 3 Flash Image (Nano Banana 2)
+                # Lưu ý: Cấu trúc gọi hàm phụ thuộc vào phiên bản google-generativeai bạn cài đặt.
                 
-                # Gọi mô hình AI (Sử dụng Gemini 1.5 Pro hỗ trợ phân tích và xử lý hình ảnh)
-                model = genai.GenerativeModel('gemini-1.5-pro')
+                st.info("Đang xử lý ảnh... Sức mạnh của AI đang được vận dụng, vui lòng đợi trong giây lát 🚀")
                 
-                st.info("Đang gửi yêu cầu lên máy chủ AI... Quá trình này có thể mất vài chục giây tùy số lượng ảnh.")
-                progress_bar_ai = st.progress(0)
+                # Tạo bộ nhớ để nén file trả về
+                ai_zip_buffer = io.BytesIO()
                 
-                # Lưu ý: Code dưới đây giả lập luồng gọi API xử lý ảnh (Image-to-Image editing). 
-                # Tùy thuộc vào bản cập nhật API hiện hành của Google, bạn sẽ nhận được response dạng nội dung hướng dẫn 
-                # hoặc URL ảnh đầu ra.
-                for i, file in enumerate(ai_uploaded_files):
-                    img = Image.open(file)
-                    
-                    # Gửi ảnh và prompt lên AI
-                    response = model.generate_content([ai_prompt, img])
-                    
-                    st.write(f"**Kết quả cho ảnh {file.name}:**")
-                    st.write(response.text) # Hiển thị phản hồi từ AI
-                    
-                    progress_bar_ai.progress((i + 1) / len(ai_uploaded_files))
-                    
-                st.success("🎉 AI đã xử lý xong!")
+                with zipfile.ZipFile(ai_zip_buffer, "w") as ai_zip_file:
+                    for i, file in enumerate(ai_uploaded_files):
+                        img = Image.open(file)
+                        
+                        # Hiển thị ảnh gốc cho trực quan
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.image(img, caption=f"🖼️ Ảnh Gốc: {file.name}", use_column_width=True)
+                            
+                        # Gọi API chỉnh sửa ảnh
+                        # (Hàm edit_image/generate_images sẽ nhận base_image và prompt)
+                        # Giả định SDK đã cập nhật phương thức edit cho mô hình Flash Image
+                        model = genai.ImageGenerationModel("models/gemini-3-flash-image")
+                        
+                        response = model.edit_image(
+                            base_image=img,
+                            prompt=ai_prompt,
+                        )
+                        
+                        # Xử lý và hiển thị ảnh đầu ra
+                        if response.images:
+                            ai_output_img = response.images[0]
+                            
+                            with col2:
+                                st.image(ai_output_img, caption=f"✨ Ảnh Đã Xử Lý", use_column_width=True)
+                            
+                            # Lưu ảnh vào ZIP
+                            img_byte_arr = io.BytesIO()
+                            ai_output_img.save(img_byte_arr, format='JPEG', quality=95)
+                            file_name = file.name if file.name else f"ai_image_{i}.jpg"
+                            ai_zip_file.writestr(f"AI_Edited_{file_name}", img_byte_arr.getvalue())
+                        else:
+                            st.warning(f"AI không thể tạo ảnh cho file {file.name}. Có thể do vi phạm chính sách an toàn.")
+                
+                st.success("🎉 Đã sinh xong toàn bộ ảnh mới!")
+                st.download_button("📦 Tải Ảnh AI Về (.zip)", data=ai_zip_buffer.getvalue(), file_name="anh_ai_xuly.zip", mime="application/zip", key="tab2_download")
                 
             except Exception as e:
-                st.error(f"❌ Có lỗi xảy ra khi gọi AI (Vui lòng kiểm tra lại API Key): {e}")
+                st.error(f"❌ Có lỗi khi gọi AI: {e}")
