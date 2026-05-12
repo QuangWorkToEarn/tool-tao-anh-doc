@@ -97,7 +97,7 @@ with tab2:
             try:
                 genai.configure(api_key=api_key_input)
                 # Dùng Gemini 1.5 Pro siêu đỉnh trong việc đọc hiểu ảnh và dịch thuật
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('models/gemini-1.5-flash')
                 
                 st.info("Đang xử lý... AI đang dịch và hệ thống đang dàn lại bố cục chuẩn TikTok 🚀")
                 ai_zip_buffer = io.BytesIO()
