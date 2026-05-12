@@ -9,12 +9,16 @@ TARGET_HEIGHT = 1920
 
 st.set_page_config(page_title="Bot Tạo Ảnh Dọc", page_icon="📱")
 st.title("📱 Tool Tạo Ảnh Dọc 9:16 Tự Động")
-st.markdown("Kéo thả ảnh cần xử lý vào bên dưới. Hệ thống sẽ tự động thêm viền mờ và resize về chuẩn 1080x1920.")
 
-# Khung upload file
-uploaded_files = st.file_uploader("Chọn ảnh hoặc kéo thả vào đây (Hỗ trợ nhiều ảnh)", 
-                                  accept_multiple_files=True, 
-                                  type=['png', 'jpg', 'jpeg', 'webp'])
+# Đã cập nhật phần hướng dẫn Copy/Paste
+st.markdown("💡 **Mẹo:** Bạn có thể dùng công cụ chụp màn hình, hoặc Copy ảnh bất kỳ rồi click chuột vào khung dưới đây và ấn **Ctrl + V** (hoặc **Cmd + V**) để dán thẳng ảnh vào nhé!")
+
+# Khung upload file (Cập nhật text)
+uploaded_files = st.file_uploader(
+    "Chọn ảnh, Kéo thả, hoặc Dán (Paste) ảnh trực tiếp vào đây", 
+    accept_multiple_files=True, 
+    type=['png', 'jpg', 'jpeg', 'webp']
+)
 
 if uploaded_files:
     if st.button("🚀 Bắt Đầu Xử Lý", type="primary"):
@@ -61,7 +65,9 @@ if uploaded_files:
                     bg_img.save(img_byte_arr, format='JPEG', quality=95)
                     
                     # 6. Ghi vào file ZIP
-                    zip_file.writestr(f"916_{file.name}", img_byte_arr.getvalue())
+                    # Nếu là ảnh dán từ Clipboard, Streamlit thường đặt tên mặc định là 'image.png'
+                    file_name = file.name if file.name else f"pasted_image_{i}.jpg"
+                    zip_file.writestr(f"916_{file_name}", img_byte_arr.getvalue())
                     
                     # Cập nhật thanh tiến trình
                     progress_bar.progress((i + 1) / total_files)
